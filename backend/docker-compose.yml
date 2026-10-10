@@ -1,0 +1,89 @@
+name: ptt
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ptt
+      POSTGRES_PASSWORD: ptt
+      POSTGRES_DB: ptt
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ptt -d ptt']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '256mb']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  s3mock:
+    image: adobe/s3mock:latest
+    environment:
+      initialBuckets: ptt-voice
+      debug: 'false'
+      validKmsKeys: 'false'
+    ports:
+      - '9000:9090'
+    volumes:
+      - s3mockdata:/tmp/s3mock
+    healthcheck:
+      test: ['CMD-SHELL', 'bash -c "</dev/tcp/127.0.0.1/9090"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    command: ['--dev', '--bind', '0.0.0.0', '--port', '7880']
+    ports:
+      - '7880:7880' # TCP (websocket + livekit protocol)
+      - '7881:7881/udp' # RTC
+      - '7882:7882/udp' # RTC
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1:7880 || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      s3mock:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://ptt:ptt@postgres:5432/ptt
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      LIVEKIT_URL: ws://livekit:7880
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    volumes:
+      - .:/app
+    command: ['npm', 'run', 'dev']
+
+volumes:
+  pgdata:
+  redisdata:
+  s3mockdata:

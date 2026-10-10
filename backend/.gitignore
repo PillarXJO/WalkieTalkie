@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+*.log
+.DS_Store
+prisma/sqlite/*.db
+prisma/sqlite/*.db-journal
+artifacts/
+.vitest/
