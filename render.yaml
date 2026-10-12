@@ -46,7 +46,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: ptt-redis
           property: connectionString
       - key: JWT_ACCESS_SECRET
@@ -64,12 +64,15 @@ services:
       - key: SEED_DEMO_DATA
         value: "false"
 
+  # Render Key Value (Redis-compatible). Declared under `services` with
+  # type: keyvalue - NOT under `databases`.
+  - type: keyvalue
+    name: ptt-redis
+    plan: free
+    region: frankfurt
+
 databases:
   - name: ptt-db
     plan: free
     databaseName: ptt
     user: ptt
-
-  - name: ptt-redis
-    plan: free
-    type: redis
