@@ -1,0 +1,89 @@
+# Production stack for the PTT backend.
+#
+# Usage on the server (from the backend/ folder):
+#   1) cp .env.production.example .env   (then edit every CHANGE_ME / example.com)
+#   2) docker compose -f docker-compose.prod.yml up -d --build
+#
+# Caddy terminates TLS (Let's Encrypt) for $DOMAIN and proxies to the API,
+# including WebSocket upgrades, so the app can use https:// and wss://.
+name: ptt-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ptt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ptt}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ptt} -d ${POSTGRES_DB:-ptt}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '256mb']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Apply DB migrations, then start. `prisma` is a runtime dependency
+    # (see package.json) so the CLI is available in the image.
+    command: ['sh', '-c', 'npx prisma migrate deploy && node dist/server.js']
+    expose:
+      - '3000'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  # --- Optional: self-hosted WebRTC SFU (only needed once the app uses
+  #     LiveKit for audio). Uncomment and set LIVEKIT_* in .env. Requires a
+  #     public IP reachable over UDP 7881-7882 (set --node-ip to it).
+  # livekit:
+  #   image: livekit/livekit-server:v1.8.4
+  #   restart: unless-stopped
+  #   command: ['--bind', '0.0.0.0', '--node-ip', 'YOUR_PUBLIC_IP']
+  #   environment:
+  #     LIVEKIT_KEYS: '${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}'
+  #   ports:
+  #     - '7880:7880'
+  #     - '7881:7881/udp'
+  #     - '7882:7882/udp'
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

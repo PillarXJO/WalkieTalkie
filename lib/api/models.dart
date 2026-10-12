@@ -141,6 +141,7 @@ class Channel {
     this.myRole,
     this.isMuted = false,
     this.lastActivityAt,
+    this.createdById,
   });
 
   final String id;
@@ -156,6 +157,9 @@ class Channel {
   final String? myRole;
   final bool isMuted;
   final DateTime? lastActivityAt;
+
+  /// Who created the channel (the creator is its owner/admin).
+  final String? createdById;
 
   bool get isEcho => type == 'echo';
   bool get isBroadcast => type == 'broadcast';
@@ -177,6 +181,7 @@ class Channel {
       myRole: strOrNull(j['myRole']),
       isMuted: boolOf(j['isMuted']),
       lastActivityAt: dateOrNull(j['lastActivityAt']),
+      createdById: strOrNull(j['createdById']),
     );
   }
 }

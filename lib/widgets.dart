@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'mock_data.dart';
 import 'theme.dart';
+import 'ui_models.dart';
 
-Color presenceColor(Presence p) => switch (p) {
-      Presence.online => Tk.green,
-      Presence.busy => Tk.red,
-      Presence.away => Tk.orange,
-      Presence.offline => Tk.muted,
-    };
+Color presenceColor(BuildContext context, Presence p) {
+  final tk = Tk.of(context);
+  return switch (p) {
+    Presence.online => tk.green,
+    Presence.busy => tk.red,
+    Presence.away => tk.orange,
+    Presence.offline => tk.muted,
+  };
+}
 
 /// Avatar with a presence dot. Pass [icon] for channels/bots.
 class StatusAvatar extends StatelessWidget {
@@ -16,20 +19,22 @@ class StatusAvatar extends StatelessWidget {
   final IconData? icon;
   final Presence presence;
   final double size;
-  const StatusAvatar(this.label, {super.key, this.icon, this.presence = Presence.online, this.size = 60});
+  final String? heroTag;
+  const StatusAvatar(this.label, {super.key, this.icon, this.presence = Presence.online, this.size = 60, this.heroTag});
 
   @override
   Widget build(BuildContext context) {
+    final tk = Tk.of(context);
     final initials = label.trim().split(' ').take(2).map((w) => w.isEmpty ? '' : w[0]).join().toUpperCase();
     return Hero(
-      tag: 'avatar-$label',
+      tag: heroTag ?? 'avatar-$label',
       child: Stack(children: [
         CircleAvatar(
           radius: size / 2,
-          backgroundColor: Tk.card,
+          backgroundColor: tk.card,
           child: icon != null
-              ? Icon(icon, color: Tk.muted, size: size * .5)
-              : Text(initials, style: const TextStyle(color: Tk.muted, fontWeight: FontWeight.w600, fontSize: 20)),
+              ? Icon(icon, color: tk.muted, size: size * .5)
+              : Text(initials, style: TextStyle(color: tk.muted, fontWeight: FontWeight.w600, fontSize: 20)),
         ),
         Positioned(
           right: 0,
@@ -38,9 +43,9 @@ class StatusAvatar extends StatelessWidget {
             width: size * .3,
             height: size * .3,
             decoration: BoxDecoration(
-              color: presenceColor(presence),
+              color: presenceColor(context, presence),
               shape: BoxShape.circle,
-              border: Border.all(color: Tk.bg, width: 2),
+              border: Border.all(color: tk.bg, width: 2),
             ),
           ),
         ),
@@ -70,7 +75,8 @@ class _PttButtonState extends State<PttButton> {
 
   @override
   Widget build(BuildContext context) {
-    final c = _tx ? Tk.green : Tk.orange;
+    final tk = Tk.of(context);
+    final c = _tx ? tk.green : tk.orange;
     return GestureDetector(
       onTapDown: (_) => _set(true),
       onTapUp: (_) => _set(false),
@@ -81,9 +87,9 @@ class _PttButtonState extends State<PttButton> {
         height: widget.size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Tk.surface,
+          color: tk.surface,
           border: Border.all(color: c, width: 4),
-          boxShadow: _tx ? [BoxShadow(color: c.withOpacity(.4), blurRadius: 40, spreadRadius: 8)] : null,
+          boxShadow: _tx ? [BoxShadow(color: c.withValues(alpha: .4), blurRadius: 40, spreadRadius: 8)] : null,
         ),
         child: Icon(_tx ? Icons.graphic_eq : Icons.mic, size: 56, color: Colors.white),
       ),
@@ -102,9 +108,9 @@ class ContactTile extends StatelessWidget {
         leading: StatusAvatar(c.name, icon: c.isBot ? Icons.mic_external_on : null, presence: c.presence),
         title: Text.rich(TextSpan(children: [
           TextSpan(text: c.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-          if (c.isBot) const TextSpan(text: '  Robot', style: TextStyle(color: Tk.muted, fontSize: 18)),
+          if (c.isBot) TextSpan(text: '  Robot', style: TextStyle(color: Tk.of(context).muted, fontSize: 18)),
         ])),
-        subtitle: Text(c.subtitle, style: const TextStyle(color: Tk.muted, fontSize: 16)),
+        subtitle: Text(c.subtitle, style: TextStyle(color: Tk.of(context).muted, fontSize: 16)),
       );
 }
 
@@ -119,7 +125,7 @@ class ChannelTile extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: StatusAvatar(ch.name, icon: Icons.groups, presence: ch.enabled ? Presence.online : Presence.offline),
         title: Text(ch.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-        subtitle: Text(ch.last, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Tk.muted)),
+        subtitle: Text(ch.last, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Tk.of(context).muted)),
         trailing: Switch(value: ch.enabled, onChanged: onToggle),
       );
 }
@@ -130,14 +136,14 @@ class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key, required this.who, required this.when});
   @override
   Widget build(BuildContext context) => Container(
-        color: Tk.surface,
+        color: Tk.of(context).surface,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(children: [
           StatusAvatar(who, size: 44),
           const SizedBox(width: 14),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(who, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-            Text('↙ $when', style: const TextStyle(color: Tk.muted)),
+            Text('↙ $when', style: TextStyle(color: Tk.of(context).muted)),
           ]),
         ]),
       );

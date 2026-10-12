@@ -39,7 +39,7 @@ describe('M2 auth', () => {
     expect(body.user.email).toBe('a.register@test.dev');
     expect(body.workspaces).toHaveLength(1);
     expect(body.workspace.name).toBe("Test User's Workspace");
-    expect(body.channels.map((c: any) => c.name)).toEqual(expect.arrayContaining(['Everyone', 'Echo']));
+    expect(body.channels).toHaveLength(0);
     expect(body.user).not.toHaveProperty('passwordHash');
   });
 

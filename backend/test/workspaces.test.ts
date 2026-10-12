@@ -52,12 +52,12 @@ describe('M3 workspaces, roles, permissions', () => {
     const ws = await newWorkspace(admin, 'Ops');
     expect(ws.workspace.name).toBe('Ops');
     expect(ws.workspace.role).toBe('admin');
-    expect(ws.channels.map((c: any) => c.name)).toEqual(['Everyone', 'Echo']);
+    expect(ws.channels).toEqual([]);
 
     const list = await app.inject({ method: 'GET', url: '/workspaces', headers: auth(admin.accessToken) });
     expect(list.statusCode).toBe(200);
     expect(list.json()).toHaveLength(2); // personal + Ops
-    expect(list.json()[0].channelCount).toBeGreaterThanOrEqual(1);
+    expect(list.json()[0].channelCount).toBe(0);
   });
 
   it('denies non-members and shows 403 on a foreign workspace', async () => {

@@ -1,0 +1,22 @@
+# Caddy reverse proxy for the PTT API.
+#
+# `{$DOMAIN}` is injected from the environment (see docker-compose.prod.yml).
+# Point an A record for your domain at the server's public IP, open TCP 80+443,
+# and Caddy will automatically fetch and renew a Let's Encrypt certificate.
+# WebSocket upgrades (the /ws realtime channel) are proxied transparently.
+
+{$DOMAIN} {
+	encode gzip
+
+	# Health + API + WebSocket all live on the same origin.
+	reverse_proxy api:3000 {
+		# Long-lived PTT websocket connections.
+		transport http {
+			read_timeout 0
+		}
+	}
+
+	log {
+		output file /data/access.log
+	}
+}

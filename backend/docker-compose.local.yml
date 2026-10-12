@@ -1,0 +1,63 @@
+# Local backend stack (Postgres + Redis + API) to run on your own PC and expose
+# to the internet with a free tunnel (see run_public.ps1). Full functionality,
+# no signup, $0 - but it only runs while your PC is on.
+#
+# Usage:  cd backend && docker compose -f docker-compose.local.yml up -d --build
+name: ptt-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ptt
+      POSTGRES_PASSWORD: ptt
+      POSTGRES_DB: ptt
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ptt -d ptt']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      TRUST_PROXY: 'true'
+      DATABASE_URL: postgresql://ptt:ptt@postgres:5432/ptt
+      DATABASE_PROVIDER: postgresql
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: '*'
+      ALLOW_INSECURE_CORS: 'true'
+      LIVEKIT_ENABLED: 'false'
+      PUSH_ENABLED: 'false'
+      SEED_DEMO_DATA: 'false'
+    command: ['sh', '-c', 'npx prisma migrate deploy && node dist/server.js']
+
+volumes:
+  pgdata:
+  redisdata:

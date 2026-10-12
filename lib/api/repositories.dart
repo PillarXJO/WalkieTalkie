@@ -238,11 +238,12 @@ class ChannelsApi {
   ChannelsApi(this._c);
   final ApiClient _c;
 
-  Future<Channel> create(String workspaceId, {required String name, String? description, String? type}) async =>
+  Future<Channel> create(String workspaceId, {required String name, String? description, String? type, List<String> memberIds = const []}) async =>
       Channel.fromJson(_obj(await _c.post('/workspaces/$workspaceId/channels', body: {
         'name': name,
         if (description != null) 'description': description,
         if (type != null) 'type': type,
+        if (memberIds.isNotEmpty) 'memberIds': memberIds,
       })));
 
   Future<Channel> get(String channelId) async => Channel.fromJson(_obj(await _c.get('/channels/$channelId')));

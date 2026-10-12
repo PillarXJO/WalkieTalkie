@@ -277,8 +277,15 @@ describe('M6 real-time PTT', () => {
   it('records talk time and mirrors it back on echo channels', async () => {
     const admin = await register('echo-admin');
     const ws = await newWorkspace(admin, 'EchoCo');
-    const echo = ws.channels.find((c: any) => c.type === 'echo');
-    expect(echo).toBeTruthy();
+    const echoRes = await app.inject({
+      method: 'POST',
+      url: `/workspaces/${ws.workspace.id}/channels`,
+      headers: auth(admin.accessToken),
+      payload: { name: 'Echo', type: 'echo' },
+    });
+    expect(echoRes.statusCode).toBe(200);
+    const echo = echoRes.json();
+    expect(echo.type).toBe('echo');
 
     const request = await app.inject({
       method: 'POST',
@@ -310,7 +317,14 @@ describe('M6 real-time PTT', () => {
   it('exposes a websocket gateway for floor + presence events', async () => {
     const admin = await register('ws-admin');
     const ws = await newWorkspace(admin, 'WsCo');
-    const echo = ws.channels.find((c: any) => c.type === 'echo');
+    const echoRes = await app.inject({
+      method: 'POST',
+      url: `/workspaces/${ws.workspace.id}/channels`,
+      headers: auth(admin.accessToken),
+      payload: { name: 'Echo', type: 'echo' },
+    });
+    expect(echoRes.statusCode).toBe(200);
+    const echo = echoRes.json();
 
     const address = await app.listen({ port: 0, host: '127.0.0.1' });
     try {

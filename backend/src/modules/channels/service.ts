@@ -35,7 +35,7 @@ export const channelsService = {
   async createChannel(
     actor: { userId: string },
     workspaceId: string,
-    input: { name: string; description?: string | null; type?: ChannelType },
+    input: { name: string; description?: string | null; type?: ChannelType; memberIds?: string[] },
     db: Db = prisma(),
   ) {
     const perms = await membershipPermissions(actor.userId, workspaceId, db);
@@ -61,8 +61,18 @@ export const channelsService = {
       db,
     );
     await channelMemberRepo.join(channel.id, actor.userId, { role: 'owner' }, db);
+
+    // Add the chosen workspace members (the creator is already the owner/admin).
+    const selected = new Set(input.memberIds ?? []);
+    selected.delete(actor.userId);
+    for (const userId of selected) {
+      const membership = await membershipRepo.findByUserAndWorkspace(userId, workspaceId, db);
+      if (!membership || membership.deletedAt) continue; // only workspace members can be added
+      await channelMemberRepo.join(channel.id, userId, {}, db);
+    }
+
     await recordAudit(
-      { action: 'channel.create', entityType: 'channel', entityId: channel.id, actorId: actor.userId, workspaceId, data: { name: channel.name, type: channel.type } },
+      { action: 'channel.create', entityType: 'channel', entityId: channel.id, actorId: actor.userId, workspaceId, data: { name: channel.name, type: channel.type, memberIds: [...selected] } },
       db,
     );
     return channel;
@@ -365,7 +375,7 @@ export const channelsService = {
       await inviteRepo.recordUse(invite.id, actor.userId, db);
     }
 
-    // Join the default channel (and echo channel) so the workspace is usable.
+    // Join the workspace's existing channels so the workspace is usable.
     const channels = await channelRepo.listByWorkspace(invite.workspaceId, db);
     for (const channel of channels) {
       await channelMemberRepo.join(channel.id, actor.userId, {}, db);

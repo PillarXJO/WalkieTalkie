@@ -77,7 +77,7 @@ describe('M5 channels & invites', () => {
     expect(created.name).toBe('Tactical');
     expect(created.type).toBe('channel');
 
-    // Default channel + Echo exist from provisioning
+    // Channels are no longer provisioned with the workspace.
     expect(created.isDefault).toBe(false);
 
     const clash = await app.inject({
@@ -146,7 +146,7 @@ describe('M5 channels & invites', () => {
     expect(view.statusCode).toBe(403);
   });
 
-  it('joins, leaves, and protects the default channel', async () => {
+  it('joins and leaves a channel', async () => {
     const a = await register('join-a');
     const b = await register('join-b');
     const ws = await newWorkspace(a, 'JoinCo');
@@ -168,20 +168,6 @@ describe('M5 channels & invites', () => {
       headers: auth(b.accessToken),
     });
     expect(leave.statusCode).toBe(200);
-
-    // Cannot leave a default channel
-    const findDefault = await app.inject({
-      method: 'GET',
-      url: `/workspaces/${wid}`,
-      headers: auth(a.accessToken),
-    });
-    const defaultCh = findDefault.json().workspace.defaultChannelId;
-    const leaveDefault = await app.inject({
-      method: 'POST',
-      url: `/channels/${defaultCh}/leave`,
-      headers: auth(a.accessToken),
-    });
-    expect(leaveDefault.statusCode).toBe(400);
   });
 
   it('edits per-channel members with owner guards', async () => {
@@ -300,6 +286,7 @@ describe('M5 channels & invites', () => {
     const ws = await newWorkspace(a, 'InviteCo');
     const wid = ws.workspace.id;
     await addMember(a, wid, b.user.id, 'dispatcher');
+    await createChannel(a, wid, 'Main Room');
 
     // admin creates a member invite with QR payload
     const create = await app.inject({
@@ -362,7 +349,7 @@ describe('M5 channels & invites', () => {
     });
     expect(redeem.statusCode).toBe(200);
     expect(redeem.json().workspace.name).toBe('InviteCo');
-    expect(redeem.json().channels.map((ch: any) => ch.name)).toEqual(expect.arrayContaining(['Everyone', 'Echo']));
+    expect(redeem.json().channels.map((ch: any) => ch.name)).toEqual(expect.arrayContaining(['Main Room']));
     expect(redeem.json().workspaces.map((w: any) => w.id)).toContain(wid);
 
     // a second fresh user also fits inside maxUses=2

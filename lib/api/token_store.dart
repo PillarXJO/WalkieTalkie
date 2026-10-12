@@ -40,7 +40,7 @@ class PreferencesTokenStore implements TokenStore {
   }
 }
 
-/// In-memory store used by tests and by the mock/demo mode.
+/// In-memory store used by tests (no SharedPreferences plugin needed).
 class MemoryTokenStore implements TokenStore {
   MemoryTokenStore([this._token]);
 

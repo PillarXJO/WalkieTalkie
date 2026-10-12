@@ -3,14 +3,15 @@ import 'package:flutter/material.dart';
 import 'api/backend.dart';
 import 'app_state.dart';
 import 'screens.dart';
+import 'strings.dart';
 import 'theme.dart';
 
-/// Chooses the entry point based on backend state:
-/// - initializing -> splash
-/// - authenticated -> the existing [HomeShell]
-/// - otherwise -> [LoginScreen]
-///
-/// Mock mode (USE_BACKEND=false) never reaches this widget.
+final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+bool _isEmail(String s) => _emailRe.hasMatch(s);
+String _describeError(ApiException e, AppStrings t) =>
+    e.code == 'validation_failed' ? t.validationFailed : e.message;
+
+/// Routes between the onboarding screens based on the session state.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -20,7 +21,9 @@ class AuthGate extends StatelessWidget {
     if (session.initializing) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return session.isAuthenticated ? const HomeShell() : const LoginScreen();
+    if (!session.isAuthenticated) return const LoginScreen();
+    if (!session.onboardingComplete) return const PermissionsScreen();
+    return const HomeShell();
   }
 }
 
@@ -47,6 +50,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    final t = AppStrings.of(context);
+    final email = _email.text.trim();
+    if (_mfaToken == null) {
+      if (email.isEmpty || !_isEmail(email)) {
+        setState(() => _error = t.enterValidEmail);
+        return;
+      }
+      if (_password.text.isEmpty) {
+        setState(() => _error = t.enterPassword);
+        return;
+      }
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -56,13 +71,13 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_mfaToken != null) {
         await session.verifyMfa(mfaToken: _mfaToken!, code: _code.text.trim());
       } else {
-        final result = await session.login(email: _email.text.trim(), password: _password.text);
+        final result = await session.login(email: email, password: _password.text);
         if (result.requiresMfa) {
           setState(() => _mfaToken = result.mfaToken);
         }
       }
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      setState(() => _error = _describeError(e, t));
     } catch (e) {
       setState(() => _error = '$e');
     } finally {
@@ -72,6 +87,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppStrings.of(context);
+    final tk = Tk.of(context);
     final mfa = _mfaToken != null;
     return Scaffold(
       body: SafeArea(
@@ -79,25 +96,25 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.all(28),
           children: [
             const SizedBox(height: 40),
-            const Text('Welcome back', style: TextStyle(fontSize: 34)),
+            Text(t.welcomeBack, style: const TextStyle(fontSize: 34)),
             const SizedBox(height: 8),
-            const Text('Sign in to your PTT account.', style: TextStyle(color: Tk.muted, fontSize: 18)),
+            Text(t.signInSubtitle, style: TextStyle(color: tk.muted, fontSize: 18)),
             const SizedBox(height: 32),
             if (!mfa) ...[
-              TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+              TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: t.email)),
               const SizedBox(height: 16),
-              TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
+              TextField(controller: _password, obscureText: true, decoration: InputDecoration(labelText: t.password)),
             ] else
-              TextField(controller: _code, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6-digit code or backup code')),
+              TextField(controller: _code, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t.mfaCodeLabel)),
             const SizedBox(height: 24),
-            if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: const TextStyle(color: Tk.red))),
-            FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? 'PLEASE WAIT' : (mfa ? 'VERIFY' : 'SIGN IN'))),
+            if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: TextStyle(color: tk.red))),
+            FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? t.pleaseWait : (mfa ? t.verify : t.signIn))),
             const SizedBox(height: 12),
             TextButton(
               onPressed: _busy
                   ? null
                   : () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-              child: const Text('Create an account'),
+              child: Text(t.createAnAccount),
             ),
           ],
         ),
@@ -128,19 +145,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _submit() async {
+    final t = AppStrings.of(context);
+    final name = _name.text.trim();
+    final email = _email.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = t.enterName);
+      return;
+    }
+    if (email.isEmpty || !_isEmail(email)) {
+      setState(() => _error = t.enterValidEmail);
+      return;
+    }
+    if (_password.text.length < 8) {
+      setState(() => _error = t.passwordTooShort);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await BackendScope.of(context).register(
-        name: _name.text.trim(),
-        email: _email.text.trim(),
-        password: _password.text,
-      );
+      await BackendScope.of(context).register(name: name, email: email, password: _password.text);
       if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      setState(() => _error = _describeError(e, t));
     } catch (e) {
       setState(() => _error = '$e');
     } finally {
@@ -149,24 +177,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(28),
-            children: [
-              const Text('Create your workspace', style: TextStyle(fontSize: 32)),
-              const SizedBox(height: 28),
-              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name')),
-              const SizedBox(height: 16),
-              TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
-              const SizedBox(height: 16),
-              TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password (min 8 chars)')),
-              const SizedBox(height: 24),
-              if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: const TextStyle(color: Tk.red))),
-              FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? 'PLEASE WAIT' : 'CREATE ACCOUNT')),
-            ],
-          ),
+  Widget build(BuildContext context) {
+    final t = AppStrings.of(context);
+    final tk = Tk.of(context);
+    return Scaffold(
+      appBar: AppBar(),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(28),
+          children: [
+            Text(t.createYourWorkspace, style: const TextStyle(fontSize: 32)),
+            const SizedBox(height: 28),
+            TextField(controller: _name, decoration: InputDecoration(labelText: t.fullName)),
+            const SizedBox(height: 16),
+            TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: t.email)),
+            const SizedBox(height: 16),
+            TextField(controller: _password, obscureText: true, decoration: InputDecoration(labelText: t.passwordMinChars)),
+            const SizedBox(height: 24),
+            if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: TextStyle(color: tk.red))),
+            FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? t.pleaseWait : t.createAccount)),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }

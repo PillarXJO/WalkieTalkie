@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api/backend.dart';
 
@@ -55,6 +56,10 @@ class SessionController extends ChangeNotifier {
   bool initializing = true;
   bool busy = false;
   String? error;
+
+  /// Cleared after sign-in/registration until the user has been through the
+  /// permissions onboarding screen.
+  bool onboardingComplete = false;
   AppUser? user;
   WorkspaceBrief? workspace;
   List<WorkspaceBrief> availableWorkspaces = const [];
@@ -64,18 +69,86 @@ class SessionController extends ChangeNotifier {
   final Map<String, ContactPresence> presence = {};
   Alert? latestAlert;
 
+  // Preferences ---------------------------------------------------------------
+  static const _themeKey = 'ptt.theme_mode';
+  static const _localeKey = 'ptt.locale';
+
+  /// Persisted light/dark preference (defaults to dark).
+  ThemeMode themeMode = ThemeMode.dark;
+
+  /// Persisted UI language (defaults to English). Arabic selects RTL layout.
+  Locale locale = const Locale('en');
+
+  bool get isArabic => locale.languageCode == 'ar';
+
   bool get isAuthenticated => user != null;
+
+  /// Test-only: mark the user as authenticated so AuthGate routing can be
+  /// exercised without touching the network.
+  void setForTestUser() {
+    user = AppUser(id: 'test', name: 'Test User', email: 'test@example.com');
+    onboardingComplete = false;
+    notifyListeners();
+  }
+
+  // Preferences ---------------------------------------------------------------
+  /// Load persisted theme/language. Best-effort: preferences are unavailable in
+  /// some test environments, so failures are swallowed.
+  Future<void> loadSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final theme = prefs.getString(_themeKey);
+      themeMode = switch (theme) {
+        'light' => ThemeMode.light,
+        'system' => ThemeMode.system,
+        _ => ThemeMode.dark,
+      };
+      final lang = prefs.getString(_localeKey);
+      if (lang == 'ar') {
+        locale = const Locale('ar');
+      } else if (lang == 'en') {
+        locale = const Locale('en');
+      }
+    } catch (_) {
+      // Keep defaults.
+    }
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_themeKey, switch (mode) {
+        ThemeMode.light => 'light',
+        ThemeMode.dark => 'dark',
+        ThemeMode.system => 'system',
+      });
+    } catch (_) {}
+  }
+
+  Future<void> setLocale(Locale value) async {
+    locale = locale.languageCode == value.languageCode ? locale : Locale(value.languageCode);
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_localeKey, locale.languageCode);
+    } catch (_) {}
+  }
 
   // Lifecycle -----------------------------------------------------------------
   /// Attempt a silent refresh using a stored refresh token; called at startup.
   Future<void> bootstrap() async {
     initializing = true;
     notifyListeners();
+    await loadSettings();
     try {
       final me = await users.me();
       user = me;
       await _loadWorkspaceContext();
       realtime.connect();
+      onboardingComplete = true;
     } catch (_) {
       user = null;
     } finally {
@@ -144,9 +217,16 @@ class SessionController extends ChangeNotifier {
     availableWorkspaces = session.workspaces;
     workspace = session.workspace ?? (session.workspaces.isNotEmpty ? session.workspaces.first : null);
     channelsForWorkspace = session.channels;
+    onboardingComplete = false;
     notifyListeners();
     await refreshHome();
     realtime.connect();
+  }
+
+  /// Called by the permissions onboarding screen once the user continues.
+  void completeOnboarding() {
+    onboardingComplete = true;
+    notifyListeners();
   }
 
   void _onSessionExpired() {
@@ -157,6 +237,7 @@ class SessionController extends ChangeNotifier {
   void _reset() {
     user = null;
     workspace = null;
+    onboardingComplete = false;
     availableWorkspaces = const [];
     channelsForWorkspace = const [];
     contacts = const [];
@@ -168,6 +249,64 @@ class SessionController extends ChangeNotifier {
   // Workspace / presence ------------------------------------------------------
   Future<void> switchWorkspace(String workspaceId) async {
     await auth.switchWorkspace(workspaceId);
+    await refreshHome();
+  }
+
+  /// Extract the invite code from `ptt://invite/<code>`, `https://…/i/<code>`,
+  /// `…/invite/<code>`, or a bare code.
+  static String? inviteCodeFrom(String input) {
+    final s = input.trim();
+    final deep = RegExp(r'^[a-z][a-z0-9+.-]*://invite/([a-z0-9]{8,})$', caseSensitive: false);
+    final path = RegExp(r'/(?:i|invite)/([a-z0-9]{8,})$', caseSensitive: false);
+    for (final re in [deep, path]) {
+      final m = re.firstMatch(s);
+      if (m != null) return m.group(1);
+    }
+    return RegExp(r'^[a-z0-9]{8,}$').hasMatch(s) ? s : null;
+  }
+
+  /// Join a workspace using an invite link or bare code. Redeeming the invite
+  /// grants the member role (that is the "permission" to join), then the home
+  /// feed is refreshed with the new workspace/contacts/channels.
+  Future<Map<String, dynamic>> joinWorkspace(String codeOrLink) async {
+    final code = inviteCodeFrom(codeOrLink);
+    if (code == null) {
+      throw ArgumentError('That does not look like a valid invite code or link.');
+    }
+    final result = await channels.redeemInvite(code);
+    await refreshHome();
+    return result;
+  }
+
+  /// Build the shareable personal contact code embedded in a user's QR.
+  static String userCode(String userId) => 'ptt://user/$userId';
+
+  /// Extract a user id from `ptt://user/<id>` or a bare id/code. Returns null
+  /// when the input is neither.
+  static String? userIdFrom(String input) {
+    final s = input.trim();
+    final deep = RegExp(r'^[a-z][a-z0-9+.-]*://user/([A-Za-z0-9_-]{6,64})$', caseSensitive: false);
+    final m = deep.firstMatch(s);
+    if (m != null) return m.group(1);
+    return RegExp(r'^[A-Za-z0-9_-]{6,64}$').hasMatch(s) ? s : null;
+  }
+
+  /// Public profile lookup used to preview a scanned contact before adding.
+  Future<AppUser> lookupUser(String userId) => users.getUser(userId);
+
+  /// Add [userId] to the current user's contacts, then refresh the list.
+  Future<void> addContactById(String userId, {String? nickname}) async {
+    await users.addContact(userId: userId, nickname: nickname);
+    contacts = await users.contacts();
+    notifyListeners();
+  }
+
+  /// Create a channel in the active workspace and add the chosen members. The
+  /// creator becomes the channel owner (admin).
+  Future<void> createChannel({required String name, String? description, List<String> memberIds = const []}) async {
+    final ws = workspace;
+    if (ws == null) throw StateError('No active workspace');
+    await channels.create(ws.id, name: name, description: description, memberIds: memberIds);
     await refreshHome();
   }
 

@@ -1,0 +1,75 @@
+# Render Blueprint - deploys the PTT backend to a global HTTPS URL with no
+# domain purchase required (you get https://<name>.onrender.com).
+#
+# How to use:
+#   1. Push this repo to GitHub.
+#   2. Render Dashboard -> New + -> Blueprint -> select this repo.
+#   3. Render provisions the API (Docker), a Postgres DB and a Redis (Key Value)
+#      instance, wires DATABASE_URL / REDIS_URL, runs migrations on boot, and
+#      serves the API at  https://ptt-api.onrender.com
+#      and the realtime socket at  wss://ptt-api.onrender.com/ws
+#   4. Build the APK against that URL:
+#        powershell -ExecutionPolicy Bypass -File .\build_apk.ps1 -ServerUrl https://ptt-api.onrender.com
+#
+# Notes:
+#   - Free web services sleep after ~15 min idle (first request cold-starts).
+#     Upgrade the plan for always-on realtime.
+#   - Prisma runs `migrate deploy` on every boot (idempotent), creating the
+#     schema on first deploy.
+#   - CORS is wildcard + insecure-allowed because the client is a mobile app
+#     (no browser origin), which is permitted by the production config gate.
+
+services:
+  - type: web
+    name: ptt-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    dockerCommand: sh -c "npx prisma migrate deploy && node dist/server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: APP_VERSION
+        value: "0.1.0"
+      - key: DATABASE_PROVIDER
+        value: postgresql
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ptt-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: ptt-redis
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: ALLOW_INSECURE_CORS
+        value: "true"
+      - key: LIVEKIT_ENABLED
+        value: "false"
+      - key: PUSH_ENABLED
+        value: "false"
+      - key: SEED_DEMO_DATA
+        value: "false"
+
+databases:
+  - name: ptt-db
+    plan: free
+    databaseName: ptt
+    user: ptt
+
+  - name: ptt-redis
+    plan: free
+    type: redis

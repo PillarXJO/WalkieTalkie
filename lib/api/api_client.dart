@@ -102,25 +102,26 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) =>
-      _send(() => _http.get(_uri(path, query), headers: _headers()), authenticated: true);
+      _send(() => _http.get(_uri(path, query), headers: _headers(json: false)), authenticated: true);
 
   Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query, bool authenticated = true}) => _send(
-        () => _http.post(_uri(path, query), headers: _headers(), body: body == null ? null : jsonEncode(body)),
+        () => _http.post(_uri(path, query),
+            headers: _headers(json: body != null), body: body == null ? null : jsonEncode(body)),
         authenticated: authenticated,
       );
 
   Future<dynamic> put(String path, {Object? body, bool authenticated = true}) => _send(
-        () => _http.put(_uri(path), headers: _headers(), body: body == null ? null : jsonEncode(body)),
+        () => _http.put(_uri(path), headers: _headers(json: body != null), body: body == null ? null : jsonEncode(body)),
         authenticated: authenticated,
       );
 
   Future<dynamic> patch(String path, {Object? body}) => _send(
-        () => _http.patch(_uri(path), headers: _headers(), body: body == null ? null : jsonEncode(body)),
+        () => _http.patch(_uri(path), headers: _headers(json: body != null), body: body == null ? null : jsonEncode(body)),
         authenticated: true,
       );
 
   Future<dynamic> delete(String path, {Object? body}) => _send(
-        () => _http.delete(_uri(path), headers: _headers(), body: body == null ? null : jsonEncode(body)),
+        () => _http.delete(_uri(path), headers: _headers(json: body != null), body: body == null ? null : jsonEncode(body)),
         authenticated: true,
       );
 

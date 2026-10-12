@@ -7,6 +7,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   qr_flutter: ^4.1.0
   # Backend integration layer (lib/api). Live PTT audio itself is handled by a
   # native LiveKit plugin added at the platform layer; these are the control
@@ -14,5 +16,13 @@ dependencies:
   http: ^1.2.0
   web_socket_channel: ^2.4.5
   shared_preferences: ^2.2.3
+  permission_handler: ^13.0.2
+  mobile_scanner: ^7.3.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
 flutter:
   uses-material-design: true

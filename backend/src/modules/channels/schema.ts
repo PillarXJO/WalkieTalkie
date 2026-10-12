@@ -7,6 +7,7 @@ export const createChannelBody = z.object({
   name: z.string().trim().min(1).max(60),
   description: z.string().trim().max(300).optional().nullable(),
   type: z.enum(CHANNEL_TYPES).optional(),
+  memberIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 });
 
 export const updateChannelBody = z.object({

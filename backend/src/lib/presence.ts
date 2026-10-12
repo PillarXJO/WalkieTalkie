@@ -21,7 +21,14 @@ export async function getPresence(userId: string, opts: { isGhost?: boolean; hid
     return { userId, status: 'offline', statusMessage: '', lastSeenAt: null };
   }
 
-  const raw = await redis().hgetall(presenceKey(userId));
+  let raw: Record<string, string> | null = null;
+  try {
+    raw = await redis().hgetall(presenceKey(userId));
+  } catch {
+    // Presence is ephemeral: if Redis is unavailable, degrade to offline rather
+    // than failing the request (e.g. contact/profile reads).
+    return { userId, status: 'offline', statusMessage: '', lastSeenAt: null };
+  }
   if (!raw || Object.keys(raw).length === 0) {
     // Fall back to the persisted value in the profile.
     return { userId, status: 'offline', statusMessage: '', lastSeenAt: null };

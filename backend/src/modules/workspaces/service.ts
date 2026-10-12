@@ -19,9 +19,9 @@ export interface ProvisionedWorkspace {
 }
 
 /**
- * Every account gets a personal workspace with an `Everyone` channel wired to
- * an echo bot channel. Echo bot provisioning lives in the ptt module; here we
- * create the room skeleton ("Everyone" default channel + admin membership).
+ * Every account gets a personal workspace. Channels are no longer provisioned
+ * automatically — workspace members create channels explicitly (the creator
+ * becomes the channel owner/admin).
  */
 export async function provisionNewWorkspace(
   ownerId: string,
@@ -30,25 +30,9 @@ export async function provisionNewWorkspace(
   tx: Db = db,
 ): Promise<ProvisionedWorkspace> {
   const workspace = await workspaceRepo.create({ name, ownerId }, tx);
-  const everyone = await channelRepo.create(
-    { workspaceId: workspace.id, name: 'Everyone', type: 'channel', isDefault: true, createdById: ownerId },
-    tx,
-  );
-  const echo = await channelRepo.create(
-    { workspaceId: workspace.id, name: 'Echo', type: 'echo', createdById: ownerId },
-    tx,
-  );
   await membershipRepo.upsert(workspace.id, ownerId, { role: 'admin' }, tx);
-  // Add the creator to both channels so the room shows connected immediately.
-  await tx.channelMember.createMany({
-    data: [
-      { channelId: everyone.id, userId: ownerId, role: 'owner' },
-      { channelId: echo.id, userId: ownerId, role: 'owner' },
-    ],
-  });
-  await workspaceRepo.update(workspace.id, { defaultChannelId: everyone.id }, tx);
   const refreshed = await workspaceRepo.findById(workspace.id, db);
-  return { workspace: refreshed ?? workspace, channels: [everyone, echo] };
+  return { workspace: refreshed ?? workspace, channels: [] };
 }
 
 /** Effective permission set = role defaults ∪ explicit extras. */
@@ -194,7 +178,7 @@ export const workspaceService = {
     }));
   },
 
-  /** Admin-provisioned add (bypasses invites). Creates Everyone membership. */
+  /** Admin-provisioned add (bypasses invites). */
   async addMember(
     actor: { userId: string },
     workspaceId: string,
@@ -217,17 +201,6 @@ export const workspaceService = {
     }
 
     const updated = await membershipRepo.upsert(workspaceId, input.userId, toUpsert, db);
-    const everyone = await db.channel.findFirst({
-      where: { workspaceId, isDefault: true, deletedAt: null },
-      select: { id: true },
-    });
-    if (everyone) {
-      await db.channelMember.upsert({
-        where: { channelId_userId: { channelId: everyone.id, userId: input.userId } },
-        create: { channelId: everyone.id, userId: input.userId },
-        update: { deletedAt: null },
-      });
-    }
     await recordAudit(
       { action: 'member.add', entityType: 'membership', entityId: input.userId, actorId: actor.userId, workspaceId, data: { role: updated.role, permissions: parsePermissions(updated.permissions) } },
       db,

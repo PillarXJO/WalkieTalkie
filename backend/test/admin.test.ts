@@ -106,6 +106,8 @@ describe('M11 admin dashboard & audit log', () => {
     const ws = await newWorkspace(admin, 'DashCo');
     const wid = ws.workspace.id;
     await addMember(admin, wid, member.user.id, 'member');
+    await app.inject({ method: 'POST', url: `/workspaces/${wid}/channels`, headers: auth(admin.accessToken), payload: { name: 'Alpha' } });
+    await app.inject({ method: 'POST', url: `/workspaces/${wid}/channels`, headers: auth(admin.accessToken), payload: { name: 'Bravo' } });
 
     const res = await app.inject({ method: 'GET', url: `/workspaces/${wid}/admin/dashboard?days=30`, headers: auth(admin.accessToken) });
     expect(res.statusCode).toBe(200);
