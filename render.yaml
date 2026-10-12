@@ -24,7 +24,6 @@ services:
     name: ptt-api
     runtime: docker
     plan: free
-    region: frankfurt
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -68,7 +67,6 @@ services:
   - type: keyvalue
     name: ptt-redis
     plan: free
-    region: frankfurt
     # Empty list = not reachable from the public internet; the API connects
     # over Render's private network. Required field for Blueprint validation.
     ipAllowList: []
@@ -76,6 +74,5 @@ services:
 databases:
   - name: ptt-db
     plan: free
-    region: frankfurt
     databaseName: ptt
     user: ptt
