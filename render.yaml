@@ -76,5 +76,6 @@ services:
 databases:
   - name: ptt-db
     plan: free
+    region: frankfurt
     databaseName: ptt
     user: ptt
