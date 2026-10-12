@@ -30,7 +30,6 @@ services:
     dockerContext: .
     healthCheckPath: /healthz
     autoDeploy: true
-    dockerCommand: sh -c "npx prisma migrate deploy && node dist/server.js"
     envVars:
       - key: NODE_ENV
         value: production

@@ -30,4 +30,5 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 USER node
-CMD ["node", "dist/server.js"]
+# Apply pending DB migrations (idempotent), then start the server.
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
